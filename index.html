@@ -9,6 +9,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Noto Sans JP','Hiragino Maru Gothic Pro',sans-serif;background:#0d0015}
@@ -329,6 +330,75 @@ function LoadingScreen(){
   );
 }
 
+/* ── SHARE BUTTONS ── */
+function ShareButtons({accent, onReset}){
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      const card = document.getElementById('idol-card');
+      // アニメーションを一時停止してキャプチャ
+      card.style.animation = 'none';
+      const canvas = await html2canvas(card, {
+        scale: 2,
+        backgroundColor: null,
+        useCORS: true,
+        logging: false,
+      });
+      card.style.animation = '';
+
+      canvas.toBlob(async (blob) => {
+        const file = new File([blob], 'idol-card.png', { type: 'image/png' });
+
+        // Web Share API（iOS Safari対応）
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'アイドルカード ✨',
+            text: 'アイドルカードメーカーで作ったよ！ card.taskra.jp',
+          });
+        } else {
+          // フォールバック：ダウンロード
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'idol-card.png';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+        setSharing(false);
+      }, 'image/png');
+    } catch (e) {
+      setSharing(false);
+    }
+  };
+
+  return(
+    <div className="no-print" style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+      <button className="btn" onClick={handleShare} disabled={sharing}
+        style={{width:'100%',padding:'15px',fontSize:'16px',letterSpacing:'3px'}}>
+        {sharing ? '✦ 画像を作成中…' : '📤 LINEやSNSで送る'}
+      </button>
+      <div style={{display:'flex',gap:'10px'}}>
+        <button className="btn" onClick={()=>window.print()}
+          style={{flex:1,padding:'12px',fontSize:'14px',
+            background:'rgba(255,255,255,.1)',boxShadow:'none',
+            border:'1.5px solid rgba(255,150,255,.3)'}}>
+          🖨️ 印刷
+        </button>
+        <button onClick={onReset} style={{
+          flex:1,background:'rgba(255,255,255,.07)',
+          border:'1.5px solid rgba(255,150,255,.3)',
+          borderRadius:'50px',padding:'12px',fontSize:'14px',
+          color:'rgba(255,200,255,.8)',cursor:'pointer',fontWeight:'bold',
+          fontFamily:'inherit',
+        }}>もう一度 ✦</button>
+      </div>
+    </div>
+  );
+}
+
 /* ── CARD ── */
 function CardScreen({data,onReset}){
   if(!data)return null;
@@ -463,18 +533,7 @@ function CardScreen({data,onReset}){
       </div>
 
       {/* Buttons */}
-      <div className="no-print" style={{display:'flex',gap:'10px'}}>
-        <button className="btn" onClick={()=>window.print()} style={{flex:1,padding:'13px',fontSize:'15px'}}>
-          🖨️ 印刷する
-        </button>
-        <button onClick={onReset} style={{
-          flex:1,background:'rgba(255,255,255,.07)',
-          border:'1.5px solid rgba(255,150,255,.3)',
-          borderRadius:'50px',padding:'13px',fontSize:'15px',
-          color:'rgba(255,200,255,.8)',cursor:'pointer',fontWeight:'bold',
-          fontFamily:'inherit',transition:'all .2s',
-        }}>もう一度 ✦</button>
-      </div>
+      <ShareButtons accent={accent} onReset={onReset}/>
     </div>
   );
 }
