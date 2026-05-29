@@ -1,0 +1,358 @@
+import { useState, useEffect } from "react";
+
+const QUESTIONS = [
+  { id: "color", emoji: "🎨", label: "好きな色は？", placeholder: "例：ピンク、水色、むらさき" },
+  { id: "food", emoji: "🍓", label: "好きな食べ物は？", placeholder: "例：いちご、チョコ、プリン" },
+  { id: "skill", emoji: "⭐", label: "得意なことは？", placeholder: "例：ダンス、歌、絵を描く" },
+  {
+    id: "personality", emoji: "🌸", label: "自分の性格に近いのは？", type: "select",
+    options: [
+      "みんなを笑わせるムードメーカー",
+      "クールでかっこいいタイプ",
+      "元気いっぱいパワフルタイプ",
+      "やさしくて癒し系タイプ",
+      "ミステリアスなタイプ",
+    ],
+  },
+  { id: "phrase", emoji: "💬", label: "好きな言葉・よく言うセリフは？", placeholder: "例：なんとかなる！、ぜったいできる！" },
+  { id: "dream", emoji: "🌟", label: "将来なりたいものは？", placeholder: "例：歌手、デザイナー、お医者さん" },
+];
+
+const CSS = `
+  @keyframes float { 0%,100%{transform:translateY(0) rotate(0)} 50%{transform:translateY(-18px) rotate(180deg)} }
+  @keyframes fadeInUp { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes holo { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+  @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+  @keyframes pulseGlow {
+    0%,100%{box-shadow:0 0 24px rgba(255,140,220,0.45),0 0 48px rgba(180,140,255,0.2)}
+    50%{box-shadow:0 0 48px rgba(255,140,220,0.85),0 0 96px rgba(180,140,255,0.4)}
+  }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes barGrow { from{width:0%} to{width:var(--bar-w)} }
+  .btn-main {
+    background: linear-gradient(135deg,#ff6bb3,#c06aff,#6ab4ff);
+    border:none; color:#fff; padding:14px 36px; border-radius:50px;
+    font-size:17px; font-weight:900; cursor:pointer; letter-spacing:2px;
+    transition:all .25s; box-shadow:0 4px 24px rgba(180,80,255,.38);
+  }
+  .btn-main:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 8px 36px rgba(180,80,255,.55)}
+  .btn-main:active{transform:scale(.97)}
+  .btn-main:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .opt-btn {
+    width:100%; background:rgba(255,255,255,.72); border:2px solid rgba(190,140,255,.3);
+    border-radius:16px; padding:12px 18px; text-align:left; font-size:15px;
+    cursor:pointer; transition:all .18s; margin-bottom:9px; display:block;
+    font-family:inherit; color:#6030a0; backdrop-filter:blur(8px);
+  }
+  .opt-btn:hover{background:rgba(255,180,240,.5);border-color:rgba(190,80,255,.6);transform:translateX(6px)}
+  .input-idol {
+    width:100%; padding:14px 20px; border-radius:20px; border:2px solid rgba(190,140,255,.4);
+    background:rgba(255,255,255,.82); font-size:16px; outline:none;
+    box-sizing:border-box; backdrop-filter:blur(8px); transition:border-color .2s;
+    font-family:inherit; color:#5030a0;
+  }
+  .input-idol:focus{border-color:#c06aff}
+  .card-holo {
+    background:linear-gradient(115deg,rgba(255,255,255,.06) 0%,rgba(255,190,230,.22) 20%,rgba(190,170,255,.22) 40%,rgba(170,210,255,.22) 60%,rgba(190,255,240,.18) 80%,rgba(255,255,255,.06) 100%);
+    background-size:200% 200%; animation:holo 5s ease infinite;
+  }
+  @media print {
+    body *{visibility:hidden}
+    #idol-card,#idol-card *{visibility:visible}
+    #idol-card{position:fixed;left:0;top:0;width:100%;z-index:9999}
+    .no-print{display:none!important}
+  }
+`;
+
+export default function IdolCardMaker() {
+  const [step, setStep] = useState("intro");
+  const [qIdx, setQIdx] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [inputVal, setInputVal] = useState("");
+  const [cardData, setCardData] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const handleAnswer = (val) => {
+    if (!val.trim()) return;
+    const next = { ...answers, [QUESTIONS[qIdx].id]: val };
+    setAnswers(next);
+    if (qIdx < QUESTIONS.length - 1) { setQIdx(i => i + 1); setInputVal(""); }
+    else generateCard(next);
+  };
+
+  const generateCard = async (data) => {
+    setStep("loading");
+    const prompt = `あなたはアイドルグループのスタープロデューサーです。以下の情報をもとに9〜11歳の女の子向けオリジナルアイドルキャラクターカードを作成してください。
+
+情報:
+- 好きな色: ${data.color}
+- 好きな食べ物: ${data.food}
+- 得意なこと: ${data.skill}
+- 性格: ${data.personality}
+- 好きな言葉: ${data.phrase}
+- 将来の夢: ${data.dream}
+
+以下のJSONのみで返答（前置き・後書き・コードブロック一切不要）:
+{
+  "idol_name": "芸名（ひらがな/カタカナ/漢字の可愛い名前、2〜4文字）",
+  "idol_name_reading": "ふりがな（ひらがな）",
+  "group_name": "所属グループ名（絵文字あり、例：✨スターリィブルーム）",
+  "catchphrase": "キャッチフレーズ（〜だよ！などの語尾で15文字以内）",
+  "special_move": "必殺パフォーマンス技の名前（例：虹色スターシャワー）",
+  "special_move_desc": "必殺技の説明（1文、かっこよく）",
+  "profile": "アイドルとしてのプロフィール文（40〜60字、魅力的に）",
+  "rival_name": "ライバルキャラの名前のみ",
+  "rival_relation": "ライバルとの関係性（1文、ドラマティックに）",
+  "hidden_talent": "意外な隠し才能（笑えるか驚ける1文）",
+  "star_power": 88から99の間の整数
+}`;
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514", max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      const json = await res.json();
+      const text = json.content.filter(i => i.type === "text").map(i => i.text).join("");
+      setCardData(JSON.parse(text.replace(/```json|```/g, "").trim()));
+      setStep("card");
+    } catch {
+      setErr("エラーが発生しました。もう一度試してみてね！");
+      setStep("intro");
+    }
+  };
+
+  const reset = () => { setStep("intro"); setQIdx(0); setAnswers({}); setInputVal(""); setCardData(null); setErr(null); };
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg,#ffd8f4 0%,#f2ccff 28%,#ccd8ff 58%,#ccf0ff 100%)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "24px", fontFamily: "'Hiragino Maru Gothic Pro','Rounded Mplus 1c',sans-serif",
+      position: "relative", overflow: "hidden",
+    }}>
+      <style>{CSS}</style>
+
+      {/* BG decoration stars */}
+      {["⭐","✨","💫","🌟","✨","💕"].map((s, i) => (
+        <div key={i} style={{
+          position: "fixed", fontSize: `${14 + i * 4}px`, opacity: .25,
+          top: `${8 + i * 14}%`,
+          left: i % 2 === 0 ? `${4 + i * 7}%` : `${72 + i * 4}%`,
+          animation: `float ${3.2 + i * .45}s ease-in-out infinite`,
+          animationDelay: `${i * .65}s`, pointerEvents: "none", zIndex: 0,
+        }}>{s}</div>
+      ))}
+
+      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: "460px" }}>
+        {step === "intro"    && <IntroScreen onStart={() => setStep("questions")} err={err} />}
+        {step === "questions"&& <QuestionScreen q={QUESTIONS[qIdx]} idx={qIdx} total={QUESTIONS.length} val={inputVal} setVal={setInputVal} onAnswer={handleAnswer} />}
+        {step === "loading"  && <LoadingScreen />}
+        {step === "card"     && <CardScreen data={cardData} onReset={reset} />}
+      </div>
+    </div>
+  );
+}
+
+/* ── INTRO ── */
+function IntroScreen({ onStart, err }) {
+  return (
+    <div style={{ textAlign: "center", animation: "fadeInUp .6s ease" }}>
+      <div style={{ fontSize: "76px", animation: "float 2.8s ease-in-out infinite" }}>🌟</div>
+      <h1 style={{
+        fontSize: "26px", fontWeight: 900, letterSpacing: "3px", margin: "8px 0 6px",
+        background: "linear-gradient(135deg,#ff5fae,#c060ff,#5aafff)",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+      }}>アイドルカードメーカー</h1>
+      <p style={{ color: "#b060d8", fontSize: "13px", letterSpacing: "2px", marginBottom: "28px" }}>✨ あなただけのアイドルが生まれる ✨</p>
+      {err && <p style={{ color: "#ff3070", fontSize: "13px", marginBottom: "12px" }}>{err}</p>}
+      <div style={{
+        background: "rgba(255,255,255,.72)", backdropFilter: "blur(18px)",
+        borderRadius: "24px", padding: "22px 24px", marginBottom: "28px",
+        border: "1px solid rgba(190,140,255,.3)", boxShadow: "0 8px 32px rgba(190,100,255,.12)",
+      }}>
+        <p style={{ color: "#7040a8", fontSize: "14px", lineHeight: 1.9, margin: 0 }}>
+          🎤 6つの質問に答えるだけで<br />
+          あなただけのアイドルキャラクターカードが<br />
+          完成するよ！友達に見せちゃおう 💕
+        </p>
+      </div>
+      <button className="btn-main" onClick={onStart}>つくってみる →</button>
+    </div>
+  );
+}
+
+/* ── QUESTION ── */
+function QuestionScreen({ q, idx, total, val, setVal, onAnswer }) {
+  return (
+    <div style={{ animation: "fadeInUp .38s ease" }}>
+      <div style={{ marginBottom: "18px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+          <span style={{ color: "#a060d0", fontSize: "12px", fontWeight: "bold" }}>質問 {idx + 1} / {total}</span>
+          <span style={{ color: "#c090e0", fontSize: "13px" }}>{"⭐".repeat(idx + 1)}{"☆".repeat(total - idx - 1)}</span>
+        </div>
+        <div style={{ background: "rgba(255,255,255,.5)", borderRadius: "8px", height: "8px" }}>
+          <div style={{
+            background: "linear-gradient(90deg,#ff6bb3,#c06aff)",
+            height: "100%", borderRadius: "8px",
+            width: `${((idx + 1) / total) * 100}%`, transition: "width .4s ease",
+          }} />
+        </div>
+      </div>
+      <div style={{
+        background: "rgba(255,255,255,.76)", backdropFilter: "blur(20px)",
+        borderRadius: "28px", padding: "30px 26px",
+        border: "1px solid rgba(190,140,255,.3)", boxShadow: "0 8px 40px rgba(190,100,255,.14)",
+      }}>
+        <div style={{ fontSize: "46px", textAlign: "center", marginBottom: "10px" }}>{q.emoji}</div>
+        <h2 style={{ fontSize: "19px", fontWeight: 900, color: "#7838b8", textAlign: "center", marginBottom: "22px", letterSpacing: "1px" }}>
+          {q.label}
+        </h2>
+        {q.type === "select" ? (
+          <div>{q.options.map(o => <button key={o} className="opt-btn" onClick={() => onAnswer(o)}>{o}</button>)}</div>
+        ) : (
+          <>
+            <input className="input-idol" value={val} onChange={e => setVal(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && val.trim() && onAnswer(val)}
+              placeholder={q.placeholder} autoFocus />
+            <button className="btn-main" onClick={() => onAnswer(val)} disabled={!val.trim()}
+              style={{ marginTop: "18px", width: "100%" }}>
+              つぎへ ✨
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── LOADING ── */
+function LoadingScreen() {
+  const msgs = ["✨ アイドルを召喚中…","🌟 才能を解析中…","💫 必殺技を考案中…","🎤 プロフィール作成中…","🌸 カードを仕上げ中…"];
+  const [i, setI] = useState(0);
+  useEffect(() => { const t = setInterval(() => setI(n => (n + 1) % msgs.length), 1100); return () => clearInterval(t); }, []);
+  return (
+    <div style={{ textAlign: "center", animation: "fadeInUp .4s ease" }}>
+      <div style={{ fontSize: "72px", display: "inline-block", animation: "spin 1.8s linear infinite" }}>⭐</div>
+      <h2 style={{ color: "#8040c0", fontSize: "18px", fontWeight: "bold", marginTop: "18px", letterSpacing: "2px" }}>{msgs[i]}</h2>
+      <p style={{ color: "#b080d0", fontSize: "13px" }}>しばらくまってね…</p>
+    </div>
+  );
+}
+
+/* ── CARD ── */
+function CardScreen({ data, onReset }) {
+  if (!data) return null;
+  const sp = data.star_power || 95;
+  return (
+    <div style={{ animation: "fadeInUp .6s ease" }}>
+      <p className="no-print" style={{
+        textAlign: "center", fontWeight: 900, fontSize: "20px", marginBottom: "16px",
+        background: "linear-gradient(135deg,#ff5fae,#c060ff)",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+      }}>🎉 カードができたよ！</p>
+
+      {/* ── THE CARD ── */}
+      <div id="idol-card" style={{
+        background: "linear-gradient(148deg,#fff2fb,#f4e8ff,#eaefff,#eafcff)",
+        borderRadius: "28px", position: "relative", overflow: "hidden",
+        boxShadow: "0 0 0 3px rgba(200,100,255,.55), 0 24px 64px rgba(200,100,255,.28)",
+        animation: "pulseGlow 3.2s ease-in-out infinite", marginBottom: "20px",
+      }}>
+        {/* Holographic overlay */}
+        <div className="card-holo" style={{ position: "absolute", inset: 0, zIndex: 1, pointerEvents: "none", borderRadius: "28px" }} />
+
+        <div style={{ position: "relative", zIndex: 2, padding: "26px 22px 22px" }}>
+
+          {/* Group name */}
+          <p style={{ textAlign: "center", fontSize: "11px", fontWeight: "bold", color: "#b850d8", letterSpacing: "3px", margin: "0 0 2px" }}>
+            {data.group_name}
+          </p>
+
+          {/* Reading + Name */}
+          <div style={{ textAlign: "center", marginBottom: "6px" }}>
+            <p style={{ fontSize: "11px", color: "#b080cc", letterSpacing: "2px", margin: "0 0 2px" }}>{data.idol_name_reading}</p>
+            <p style={{
+              fontSize: "44px", fontWeight: 900, letterSpacing: "5px", margin: 0, lineHeight: 1.1,
+              background: "linear-gradient(135deg,#ff40a0,#c030dc,#5070ff)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            }}>{data.idol_name}</p>
+          </div>
+
+          {/* Catchphrase */}
+          <div style={{
+            textAlign: "center",
+            background: "linear-gradient(90deg,rgba(255,100,180,.14),rgba(170,100,255,.14))",
+            borderRadius: "12px", padding: "8px 14px", marginBottom: "14px",
+            fontSize: "14px", color: "#7838b0", fontWeight: "bold", letterSpacing: "1px",
+          }}>「{data.catchphrase}」</div>
+
+          {/* Star Power bar */}
+          <div style={{ marginBottom: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+              <span style={{ fontSize: "11px", color: "#9058c0", fontWeight: "bold", letterSpacing: "2px" }}>⭐ STAR POWER</span>
+              <span style={{ fontSize: "14px", fontWeight: 900, color: "#e030a0" }}>{sp}</span>
+            </div>
+            <div style={{ background: "rgba(200,150,255,.22)", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
+              <div style={{
+                background: "linear-gradient(90deg,#ff6bb3,#c06aff,#6ab4ff)",
+                height: "100%", borderRadius: "8px",
+                width: `${sp}%`, backgroundSize: "200% 100%",
+                animation: "shimmer 2.2s linear infinite",
+              }} />
+            </div>
+          </div>
+
+          <div style={{ borderTop: "1px solid rgba(190,140,255,.28)", margin: "14px 0" }} />
+
+          {/* Profile */}
+          <p style={{ fontSize: "13px", color: "#5830a0", lineHeight: 1.85, textAlign: "center", margin: "0 0 14px" }}>
+            {data.profile}
+          </p>
+
+          {/* Special move */}
+          <div style={{
+            background: "linear-gradient(135deg,rgba(255,70,150,.1),rgba(110,70,255,.1))",
+            border: "1px solid rgba(190,90,255,.3)", borderRadius: "16px",
+            padding: "12px 16px", marginBottom: "11px",
+          }}>
+            <p style={{ fontSize: "11px", color: "#c050dc", fontWeight: "bold", letterSpacing: "2px", margin: "0 0 4px" }}>💥 必殺パフォーマンス</p>
+            <p style={{ fontSize: "16px", fontWeight: 900, color: "#e030a8", letterSpacing: "1px", margin: "0 0 4px" }}>{data.special_move}</p>
+            <p style={{ fontSize: "12px", color: "#7048b0", margin: 0 }}>{data.special_move_desc}</p>
+          </div>
+
+          {/* Rival */}
+          <div style={{ background: "rgba(255,200,240,.32)", borderRadius: "12px", padding: "10px 14px", marginBottom: "11px" }}>
+            <p style={{ fontSize: "12px", color: "#7838a8", margin: 0 }}>
+              <span style={{ fontWeight: "bold", color: "#c038d8" }}>🔥 ライバル：{data.rival_name}</span><br />
+              {data.rival_relation}
+            </p>
+          </div>
+
+          {/* Hidden talent */}
+          <div style={{ background: "rgba(200,215,255,.32)", borderRadius: "12px", padding: "10px 14px", textAlign: "center" }}>
+            <p style={{ fontSize: "12px", color: "#5058b0", margin: 0 }}>
+              🎁 <strong>隠し才能：</strong>{data.hidden_talent}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="no-print" style={{ display: "flex", gap: "10px" }}>
+        <button className="btn-main" onClick={() => window.print()} style={{ flex: 1, fontSize: "15px", padding: "13px" }}>
+          🖨️ 印刷する
+        </button>
+        <button onClick={onReset} style={{
+          flex: 1, background: "rgba(255,255,255,.72)", border: "2px solid rgba(190,140,255,.4)",
+          borderRadius: "50px", padding: "13px", fontSize: "15px", color: "#7038b0",
+          cursor: "pointer", fontWeight: "bold", backdropFilter: "blur(8px)", fontFamily: "inherit",
+        }}>もう一度つくる ✨</button>
+      </div>
+    </div>
+  );
+}
